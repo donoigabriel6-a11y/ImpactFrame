@@ -16,6 +16,29 @@ namespace ImpactFrame
 {
     public class ImpactFrameMod : MelonMod
     {
+        // ========== PLATFORM DEFAULTS ==========
+#if QUEST
+        public const bool IS_QUEST = true;
+        public const int DEFAULT_PARTICLE_CAP = 50;
+        public const float DEFAULT_TIME_SCALE = 0.05f;
+        public const float DEFAULT_FLASH_INTENSITY = 1.5f;
+        public const float DEFAULT_SHAKE_MAGNITUDE = 0.08f;
+        public const float DEFAULT_SOUND_VOLUME = 0.6f;
+        public const float DEFAULT_HIT_MARKER_SIZE = 0.25f;
+        public const int DEFAULT_COMBO_FONT_SIZE = 36;
+        public const float DEFAULT_KILL_SCALE = 0.15f;
+#else
+        public const bool IS_QUEST = false;
+        public const int DEFAULT_PARTICLE_CAP = 200;
+        public const float DEFAULT_TIME_SCALE = 0.02f;
+        public const float DEFAULT_FLASH_INTENSITY = 2f;
+        public const float DEFAULT_SHAKE_MAGNITUDE = 0.12f;
+        public const float DEFAULT_SOUND_VOLUME = 0.7f;
+        public const float DEFAULT_HIT_MARKER_SIZE = 0.3f;
+        public const int DEFAULT_COMBO_FONT_SIZE = 42;
+        public const float DEFAULT_KILL_SCALE = 0.1f;
+#endif
+
         // ========== CONFIGURATION ==========
         public static bool Enabled = true;
 
@@ -30,27 +53,31 @@ namespace ImpactFrame
         // Effect Type (bitmask)
         [Flags]
         public enum Effects { None = 0, TimeStop = 1, TimeSlow = 2, ScreenFlash = 4, ScreenShake = 8, Particles = 16, Sound = 32, HitMarker = 64, All = 127 }
+#if QUEST
+        public static Effects ActiveEffects = Effects.All & ~Effects.Particles; // Particles disabled by default on Quest
+#else
         public static Effects ActiveEffects = Effects.All;
+#endif
 
         // Time Settings
-        public static float TimeScale = 0.02f;
+        public static float TimeScale = DEFAULT_TIME_SCALE;
         public static float Duration = 0.15f;
         public static float EaseInTime = 0.02f;
         public static float EaseOutTime = 0.08f;
 
         // Screen Flash (via target renderer emission)
         public static Color FlashColor = new Color(1f, 0.1f, 0.1f, 1f);
-        public static float FlashIntensity = 2f;
+        public static float FlashIntensity = DEFAULT_FLASH_INTENSITY;
         public static bool FlashTargetOnly = true;
 
         // Screen Shake
-        public static float ShakeMagnitude = 0.12f;
+        public static float ShakeMagnitude = DEFAULT_SHAKE_MAGNITUDE;
         public static float ShakeRoughness = 12f;
         public static float ShakeFadeIn = 0.01f;
         public static float ShakeFadeOut = 0.08f;
 
         // Particles
-        public static bool EnableParticles = true;
+        public static bool EnableParticles = !IS_QUEST; // Disabled by default on Quest
         public static int ParticleCount = 25;
         public static float ParticleSize = 0.06f;
         public static float ParticleLifetime = 0.4f;
@@ -60,12 +87,12 @@ namespace ImpactFrame
 
         // Sound
         public static bool EnableSound = true;
-        public static float SoundVolume = 0.7f;
+        public static float SoundVolume = DEFAULT_SOUND_VOLUME;
         public static float SoundPitch = 1.2f;
 
-        // Hit Marker (using simple LineRenderer in world space)
+        // Hit Marker
         public static bool ShowHitMarker = true;
-        public static float HitMarkerSize = 0.3f;
+        public static float HitMarkerSize = DEFAULT_HIT_MARKER_SIZE;
         public static float HitMarkerDuration = 0.18f;
         public static Color HitMarkerColor = new Color(1f, 1f, 1f, 1f);
         public static float HitMarkerThickness = 0.02f;
@@ -79,13 +106,13 @@ namespace ImpactFrame
         // Slow-mo on kill
         public static bool KillSlowMo = true;
         public static float KillSlowMoDuration = 0.5f;
-        public static float KillSlowMoScale = 0.1f;
+        public static float KillSlowMoScale = DEFAULT_KILL_SCALE;
 
         // ========== INTERNAL STATE ==========
         private static readonly HarmonyLib.Harmony _harmony = new HarmonyLib.Harmony("gdono.impactframe");
         private static MelonPreferences_Category _category;
         private static float _lastTriggerTime = -999f;
-        public static int ComboCount = 0;  // Public for UI access
+        public static int ComboCount = 0;
         private static float _lastHitTime = -999f;
         private static Camera _mainCamera;
         private static GameObject _particleSystem;
@@ -99,7 +126,11 @@ namespace ImpactFrame
             RegisterPreferences();
             LoadPreferences();
             SetupHarmony();
-            MelonLogger.Msg("[ImpactFrame] Mod initialized v2.0 - Better Impact Frames!");
+#if QUEST
+            MelonLogger.Msg("[ImpactFrame] Quest version initialized v2.0!");
+#else
+            MelonLogger.Msg("[ImpactFrame] PC version initialized v2.0 - Better Impact Frames!");
+#endif
         }
 
         private void RegisterPreferences()
@@ -117,7 +148,7 @@ namespace ImpactFrame
             _category.CreateEntry("ActiveEffects", (int)ActiveEffects, "Bitmask: 1=TimeStop,2=TimeSlow,4=Flash,8=Shake,16=Particles,32=Sound,64=HitMarker");
 
             // Time
-            _category.CreateEntry("TimeScale", TimeScale, "Time scale during effect (0=pause, 0.02=near stop)");
+            _category.CreateEntry("TimeScale", TimeScale, "Time scale during effect (0=pause)");
             _category.CreateEntry("Duration", Duration, "Effect duration (seconds)");
             _category.CreateEntry("EaseInTime", EaseInTime, "Ease in duration");
             _category.CreateEntry("EaseOutTime", EaseOutTime, "Ease out duration");
@@ -137,8 +168,8 @@ namespace ImpactFrame
             _category.CreateEntry("ShakeFadeOut", ShakeFadeOut, "Shake fade out");
 
             // Particles
-            _category.CreateEntry("EnableParticles", EnableParticles, "Enable hit particles");
-            _category.CreateEntry("ParticleCount", ParticleCount, "Particles per hit");
+            _category.CreateEntry("EnableParticles", EnableParticles, "Enable hit particles" + (IS_QUEST ? " (costly on Quest)" : ""));
+            _category.CreateEntry("ParticleCount", ParticleCount, "Particles per hit (max " + DEFAULT_PARTICLE_CAP + ")");
             _category.CreateEntry("ParticleSize", ParticleSize, "Particle size");
             _category.CreateEntry("ParticleLifetime", ParticleLifetime, "Particle lifetime");
             _category.CreateEntry("ParticleSpeed", ParticleSpeed, "Particle initial speed");
@@ -206,7 +237,7 @@ namespace ImpactFrame
             ShakeFadeOut = Mathf.Max(0, _category.GetEntry<float>("ShakeFadeOut").Value);
 
             EnableParticles = _category.GetEntry<bool>("EnableParticles").Value;
-            ParticleCount = Mathf.Clamp(_category.GetEntry<int>("ParticleCount").Value, 0, 200);
+            ParticleCount = Mathf.Clamp(_category.GetEntry<int>("ParticleCount").Value, 0, DEFAULT_PARTICLE_CAP);
             ParticleSize = Mathf.Max(0.01f, _category.GetEntry<float>("ParticleSize").Value);
             ParticleLifetime = Mathf.Max(0.01f, _category.GetEntry<float>("ParticleLifetime").Value);
             ParticleSpeed = Mathf.Max(0, _category.GetEntry<float>("ParticleSpeed").Value);
@@ -241,7 +272,11 @@ namespace ImpactFrame
             KillSlowMoDuration = Mathf.Max(0.01f, _category.GetEntry<float>("KillSlowMoDuration").Value);
             KillSlowMoScale = Mathf.Clamp01(_category.GetEntry<float>("KillSlowMoScale").Value);
 
-            MelonLogger.Msg($"[ImpactFrame] Config loaded - Effects: {ActiveEffects}, Chance: {ImpactChance}, Duration: {Duration}s, TimeScale: {TimeScale}");
+#if QUEST
+            MelonLogger.Msg($"[ImpactFrame] Quest config loaded - Effects: {ActiveEffects}, Chance: {ImpactChance}");
+#else
+            MelonLogger.Msg($"[ImpactFrame] PC config loaded - Effects: {ActiveEffects}, Chance: {ImpactChance}");
+#endif
         }
 
         public static void ReloadConfig() => LoadPreferences();
@@ -510,7 +545,7 @@ namespace ImpactFrame
         {
             if (_mainCamera == null) _mainCamera = Camera.main;
 
-            // Particle system
+            // Particle system (only if enabled)
             if (_particleSystem == null && EnableParticles && (ActiveEffects & Effects.Particles) != 0)
             {
                 _particleSystem = new GameObject("ImpactFrameParticles");
@@ -590,7 +625,7 @@ namespace ImpactFrame
             if (_audioSource == null) yield break;
 
             int sampleRate = 44100;
-            int length = (int)(sampleRate * 0.12f);
+            int length = (int)(sampleRate * (IS_QUEST ? 0.1f : 0.12f)); // Shorter on Quest
             float[] samples = new float[length];
             for (int i = 0; i < length; i++)
             {
@@ -603,7 +638,7 @@ namespace ImpactFrame
             clip.SetData(samples, 0);
             _audioSource.pitch = SoundPitch;
             _audioSource.PlayOneShot(clip);
-            yield return new WaitForSecondsRealtime(0.15f);
+            yield return new WaitForSecondsRealtime(IS_QUEST ? 0.12f : 0.15f);
             UnityEngine.Object.Destroy(clip);
         }
 
@@ -668,7 +703,7 @@ namespace ImpactFrame
             if (_style == null)
             {
                 _style = new GUIStyle(GUI.skin.label);
-                _style.fontSize = 42;
+                _style.fontSize = ImpactFrameMod.DEFAULT_COMBO_FONT_SIZE;
                 _style.fontStyle = FontStyle.Bold;
                 _style.alignment = TextAnchor.UpperCenter;
                 _style.normal.textColor = Color.white;

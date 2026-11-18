@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>ImpactFrame</AssemblyName>
+    <RootNamespace>ImpactFrame</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Configurations>Debug;Release</Configurations>
+    <DefineConstants>QUEST;ANDROID</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <!-- Quest game install path (for reference assemblies) -->
+  <PropertyGroup>
+    <QuestGamePath Condition="'$(QuestGamePath)'==''">$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\Mods\QuestAssemblies</QuestGamePath>
+    <QuestMelonLoaderPath>$(QuestGamePath)\MelonLoader</QuestMelonLoaderPath>
+    <QuestCpp2IlOutPath>$(QuestMelonLoaderPath)\Dependencies\Il2CppAssemblyGenerator\Cpp2IL\cpp2il_out</QuestCpp2IlOutPath>
+    <QuestNetStandardPath>$(QuestMelonLoaderPath)\netstandard2.1</QuestNetStandardPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- MelonLoader and Harmony from Quest netstandard2.1 -->
+    <Reference Include="MelonLoader">
+      <HintPath>$(QuestNetStandardPath)\MelonLoader.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(QuestNetStandardPath)\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- Unity Engine from Quest cpp2il_out -->
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.AnimationModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.AudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.ParticleSystemModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(QuestCpp2IlOutPath)\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- SLZ Assemblies from Quest cpp2il_out -->
+    <Reference Include="SLZ.Marrow">
+      <HintPath>$(QuestCpp2IlOutPath)\SLZ.Marrow.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(QuestCpp2IlOutPath)\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include shared source files -->
+    <Compile Include="ImpactFrameMod.cs" />
+  </ItemGroup>
+</Project>
