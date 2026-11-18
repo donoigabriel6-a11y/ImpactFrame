@@ -6,7 +6,6 @@ using UnityEngine;
 using SLZ.Marrow;
 using SLZ.Marrow.Warehouse;
 using SLZ.Rig;
-using SLZ.Combat;
 
 [assembly: MelonInfo(typeof(ImpactFrame.ImpactFrameMod), "ImpactFrame", "1.0.0", "gdono")]
 [assembly: MelonGame("Stress Level Zero", "Bonelab")]
@@ -23,7 +22,7 @@ namespace ImpactFrame
         public static float ImpactIntensity = 0.5f; // How strong the effect is
 
         // Internal state
-        private static readonly Harmony _harmony = new Harmony("gdono.impactframe");
+        private static readonly HarmonyLib.Harmony _harmony = new HarmonyLib.Harmony("gdono.impactframe");
         private static MelonPreferences_Category _category;
 
         public override void OnInitializeMelon()
@@ -60,7 +59,7 @@ namespace ImpactFrame
 
         public override void OnDeinitializeMelon()
         {
-            _harmony.UnpatchAll("gdono.impactframe");
+            _harmony.UnpatchSelf();
             MelonLogger.Msg("[ImpactFrame] Mod deinitialized.");
         }
 
@@ -89,7 +88,7 @@ namespace ImpactFrame
 
         // Called when config changes in-game
         [HarmonyPatch(typeof(MelonPreferences), nameof(MelonPreferences.Save))]
-        private static class MelonPreferencesSavePatch
+        static class MelonPreferencesSavePatch
         {
             static void Postfix()
             {
@@ -99,15 +98,17 @@ namespace ImpactFrame
     }
 
     // Patch for melee weapon hits on NPCs/Players
-    [HarmonyPatch(typeof(CombatManager), "OnHit")]
-    private static class CombatManagerOnHitPatch
+    // Using reflection to access Assembly-CSharp types
+    [HarmonyPatch("CombatManager", "OnHit")]
+    static class CombatManagerOnHitPatch
     {
-        static bool Prefix(CombatManager __instance, HitData hitData)
+        static bool Prefix(object __instance, object hitData)
         {
             if (!ImpactFrameMod.Enabled) return true;
 
-            // Check if the hit was from a bone/melee weapon
-            if (hitData.weapon != null && IsBoneWeapon(hitData.weapon))
+            // Check if the hit was from a bone/melee weapon using reflection
+            var weapon = hitData?.GetType().GetProperty("weapon")?.GetValue(hitData);
+            if (weapon != null && IsBoneWeapon(weapon as GameObject))
             {
                 TryTriggerImpactFrame(hitData);
             }
@@ -119,22 +120,41 @@ namespace ImpactFrame
         {
             if (weapon == null) return false;
 
-            // Check for bone weapon by name or component
+            // Check for bone weapon by name
             string name = weapon.name.ToLower();
             return name.Contains("bone") ||
                    name.Contains("skull") ||
-                   weapon.GetComponent<BoneWeapon>() != null;
+                   name.Contains("femur") ||
+                   name.Contains("humerus") ||
+                   name.Contains("rib") ||
+                   name.Contains("spine");
         }
 
-        private static void TryTriggerImpactFrame(HitData hitData)
+        private static void TryTriggerImpactFrame(object hitData)
         {
-            // Check if target is NPC or Player
-            RigManager targetRig = hitData.targetRig;
+            // Get targetRig using reflection
+            var targetRig = hitData?.GetType().GetProperty("targetRig")?.GetValue(hitData);
             if (targetRig == null) return;
 
-            bool isPlayer = targetRig.isPlayer;
-            bool isNPC = targetRig.gameObject.GetComponent<NPC>() != null ||
-                         targetRig.gameObject.GetComponentInParent<NPC>() != null;
+            // Check if target is NPC or Player using reflection
+            var rigManager = targetRig as RigManager;
+            if (rigManager == null) return;
+
+            bool isPlayer = false;
+            bool isNPC = false;
+
+            // Use reflection to check properties
+            var isPlayerProp = rigManager.GetType().GetProperty("isPlayer");
+            if (isPlayerProp != null)
+                isPlayer = (bool)(isPlayerProp.GetValue(rigManager) ?? false);
+
+            // Check for NPC component via reflection
+            var npcType = Type.GetType("NPC, Assembly-CSharp");
+            if (npcType != null)
+            {
+                isNPC = rigManager.gameObject.GetComponent(npcType) != null ||
+                        rigManager.gameObject.GetComponentInParent(npcType) != null;
+            }
 
             if (!isPlayer && !isNPC) return;
 
@@ -142,16 +162,16 @@ namespace ImpactFrame
             if (UnityEngine.Random.value > ImpactFrameMod.ImpactChance) return;
 
             // Trigger impact frame effect
-            TriggerImpactFrameEffect(targetRig, hitData);
+            TriggerImpactFrameEffect(rigManager);
         }
 
-        private static void TriggerImpactFrameEffect(RigManager targetRig, HitData hitData)
+        private static void TriggerImpactFrameEffect(RigManager targetRig)
         {
             // Create a brief visual effect - screen flash / time slow / particle
-            MelonCoroutines.Start(DoImpactFrame(targetRig, hitData));
+            MelonCoroutines.Start(DoImpactFrame(targetRig));
         }
 
-        private static System.Collections.IEnumerator DoImpactFrame(RigManager targetRig, HitData hitData)
+        private static System.Collections.IEnumerator DoImpactFrame(RigManager targetRig)
         {
             // Store original time scale
             float originalTimeScale = Time.timeScale;
@@ -212,7 +232,7 @@ namespace ImpactFrame
             float t = 1f - (_timer / _duration);
 
             // Pulse effect
-            float pulse = Mathf.Sin(t * Mathf.PI);
+            float pulse = Mathf.Sin(t * (float)Math.PI);
             Color currentColor = Color.Lerp(Color.white, _flashColor, pulse * ImpactFrameMod.ImpactIntensity);
 
             _renderer.material.color = currentColor;
@@ -230,22 +250,5 @@ namespace ImpactFrame
             if (_flashMaterial != null)
                 Destroy(_flashMaterial);
         }
-    }
-
-    // Console commands for runtime config
-    [HarmonyPatch(typeof(Console), "Initialize")]
-    private static class ConsoleInitializePatch
-    {
-        static void Postfix()
-        {
-            RegisterCommands();
-        }
-    }
-
-    private static void RegisterCommands()
-    {
-        // Note: Bonelab uses a custom console system.
-        // These would need to be registered with SLZ's console if available
-        MelonLogger.Msg("[ImpactFrame] Console commands registered (if console system detected)");
     }
 }
