@@ -1,12 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <AssemblyName>ImpactFrame</AssemblyName>
     <RootNamespace>ImpactFrame</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Configurations>Debug;Release</Configurations>
     <DefineConstants>QUEST;ANDROID</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
@@ -15,22 +17,21 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
 
-  <!-- Quest game install path (for reference assemblies) -->
+  <!-- Quest extracted assemblies path (actual structure) -->
   <PropertyGroup>
-    <QuestGamePath Condition="'$(QuestGamePath)'==''">$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\Mods\QuestAssemblies</QuestGamePath>
-    <QuestMelonLoaderPath>$(QuestGamePath)\MelonLoader</QuestMelonLoaderPath>
-    <QuestCpp2IlOutPath>$(QuestMelonLoaderPath)\Dependencies\Il2CppAssemblyGenerator\Cpp2IL\cpp2il_out</QuestCpp2IlOutPath>
-    <QuestNetStandardPath>$(QuestMelonLoaderPath)\netstandard2.1</QuestNetStandardPath>
+    <QuestAssembliesPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\Mods\QuestAssemblies</QuestAssembliesPath>
+    <QuestCpp2IlOutPath>$(QuestAssembliesPath)\cpp2il_out</QuestCpp2IlOutPath>
+    <QuestNet8Path>$(QuestAssembliesPath)\netstandard2.1\net8</QuestNet8Path>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- MelonLoader and Harmony from Quest netstandard2.1 -->
+    <!-- MelonLoader and Harmony from Quest net8 -->
     <Reference Include="MelonLoader">
-      <HintPath>$(QuestNetStandardPath)\MelonLoader.dll</HintPath>
+      <HintPath>$(QuestNet8Path)\MelonLoader.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="0Harmony">
-      <HintPath>$(QuestNetStandardPath)\0Harmony.dll</HintPath>
+      <HintPath>$(QuestNet8Path)\0Harmony.dll</HintPath>
       <Private>False</Private>
     </Reference>
 
@@ -68,9 +69,21 @@
       <Private>False</Private>
     </Reference>
 
-    <!-- SLZ Assemblies from Quest cpp2il_out -->
+    <!-- mscorlib from Quest (Il2Cpp) -->
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(QuestCpp2IlOutPath)\Il2Cppmscorlib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- Il2CppInterop.Runtime for Il2CppObjectBase -->
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(QuestNet8Path)\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- SLZ Assemblies from Quest cpp2il_out (Il2Cpp prefixed) -->
     <Reference Include="SLZ.Marrow">
-      <HintPath>$(QuestCpp2IlOutPath)\SLZ.Marrow.dll</HintPath>
+      <HintPath>$(QuestCpp2IlOutPath)\Il2CppSLZ.Marrow.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Assembly-CSharp">

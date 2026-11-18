@@ -6,8 +6,6 @@ using HarmonyLib;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.Rendering;
-using SLZ.Marrow;
-using SLZ.Rig;
 
 [assembly: MelonInfo(typeof(ImpactFrame.ImpactFrameMod), "ImpactFrame", "2.0.0", "gdono")]
 [assembly: MelonGame("Stress Level Zero", "Bonelab")]
@@ -18,25 +16,25 @@ namespace ImpactFrame
     {
         // ========== PLATFORM DEFAULTS ==========
 #if QUEST
-        public const bool IS_QUEST = true;
-        public const int DEFAULT_PARTICLE_CAP = 50;
-        public const float DEFAULT_TIME_SCALE = 0.05f;
-        public const float DEFAULT_FLASH_INTENSITY = 1.5f;
-        public const float DEFAULT_SHAKE_MAGNITUDE = 0.08f;
-        public const float DEFAULT_SOUND_VOLUME = 0.6f;
-        public const float DEFAULT_HIT_MARKER_SIZE = 0.25f;
+        private const bool IS_QUEST = true;
+        private const int DEFAULT_PARTICLE_CAP = 50;
+        private const float DEFAULT_TIME_SCALE = 0.05f;
+        private const float DEFAULT_FLASH_INTENSITY = 1.5f;
+        private const float DEFAULT_SHAKE_MAGNITUDE = 0.08f;
+        private const float DEFAULT_SOUND_VOLUME = 0.6f;
+        private const float DEFAULT_HIT_MARKER_SIZE = 0.25f;
         public const int DEFAULT_COMBO_FONT_SIZE = 36;
-        public const float DEFAULT_KILL_SCALE = 0.15f;
+        private const float DEFAULT_KILL_SCALE = 0.15f;
 #else
-        public const bool IS_QUEST = false;
-        public const int DEFAULT_PARTICLE_CAP = 200;
-        public const float DEFAULT_TIME_SCALE = 0.02f;
-        public const float DEFAULT_FLASH_INTENSITY = 2f;
-        public const float DEFAULT_SHAKE_MAGNITUDE = 0.12f;
-        public const float DEFAULT_SOUND_VOLUME = 0.7f;
-        public const float DEFAULT_HIT_MARKER_SIZE = 0.3f;
+        private const bool IS_QUEST = false;
+        private const int DEFAULT_PARTICLE_CAP = 200;
+        private const float DEFAULT_TIME_SCALE = 0.02f;
+        private const float DEFAULT_FLASH_INTENSITY = 2f;
+        private const float DEFAULT_SHAKE_MAGNITUDE = 0.12f;
+        private const float DEFAULT_SOUND_VOLUME = 0.7f;
+        private const float DEFAULT_HIT_MARKER_SIZE = 0.3f;
         public const int DEFAULT_COMBO_FONT_SIZE = 42;
-        public const float DEFAULT_KILL_SCALE = 0.1f;
+        private const float DEFAULT_KILL_SCALE = 0.1f;
 #endif
 
         // ========== CONFIGURATION ==========
@@ -120,17 +118,44 @@ namespace ImpactFrame
         private static bool _isEffectActive = false;
         private static Dictionary<Renderer, Material[]> _originalMaterials = new Dictionary<Renderer, Material[]>();
 
+        // Cached reflection types
+        private static Type _rigManagerType;
+        private static Type _npcType;
+        private static PropertyInfo _isPlayerProperty;
+        private static PropertyInfo _healthProperty;
+
         public override void OnInitializeMelon()
         {
             _category = MelonPreferences.CreateCategory("ImpactFrame");
             RegisterPreferences();
             LoadPreferences();
+            InitializeReflection();
             SetupHarmony();
 #if QUEST
             MelonLogger.Msg("[ImpactFrame] Quest version initialized v2.0!");
 #else
             MelonLogger.Msg("[ImpactFrame] PC version initialized v2.0 - Better Impact Frames!");
 #endif
+        }
+
+        private static void InitializeReflection()
+        {
+            // Get RigManager type from Assembly-CSharp
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (asm.GetName().Name == "Assembly-CSharp")
+                {
+                    _rigManagerType = asm.GetType("RigManager");
+                    _npcType = asm.GetType("NPC");
+                    break;
+                }
+            }
+
+            if (_rigManagerType != null)
+            {
+                _isPlayerProperty = _rigManagerType.GetProperty("isPlayer");
+                _healthProperty = _rigManagerType.GetProperty("health");
+            }
         }
 
         private void RegisterPreferences()
@@ -314,6 +339,35 @@ namespace ImpactFrame
             _originalMaterials.Clear();
         }
 
+        // ========== HELPER METHODS ==========
+        private static object GetPropertyValue(object obj, string propertyName)
+        {
+            if (obj == null) return null;
+            var prop = obj.GetType().GetProperty(propertyName);
+            return prop?.GetValue(obj);
+        }
+
+        private static bool IsBoneWeapon(GameObject weapon)
+        {
+            if (weapon == null) return false;
+            string name = weapon.name.ToLower();
+            return name.Contains("bone") || name.Contains("skull") || name.Contains("femur") ||
+                   name.Contains("humerus") || name.Contains("rib") || name.Contains("spine") ||
+                   name.Contains("clavicle") || name.Contains("scapula") || name.Contains("pelvis") ||
+                   name.Contains("radius") || name.Contains("ulna") || name.Contains("tibia") ||
+                   name.Contains("fibula") || name.Contains("vertebra");
+        }
+
+        private static void UpdateCombo()
+        {
+            if (!EnableCombo) return;
+            if (Time.unscaledTime - _lastHitTime <= ComboWindow)
+                ComboCount = Mathf.Min(ComboCount + 1, MaxComboCount);
+            else
+                ComboCount = 1;
+            _lastHitTime = Time.unscaledTime;
+        }
+
         // ========== CORE PATCH ==========
         [HarmonyPatch("CombatManager", "OnHit")]
         static class CombatManagerOnHitPatch
@@ -324,28 +378,40 @@ namespace ImpactFrame
                 if (Time.unscaledTime - _lastTriggerTime < Cooldown) return true;
                 if (UnityEngine.Random.value > ImpactChance) return true;
 
-                var weapon = hitData?.GetType().GetProperty("weapon")?.GetValue(hitData) as GameObject;
+                // Get weapon via reflection
+                var weapon = GetPropertyValue(hitData, "weapon") as GameObject;
                 if (RequireBoneWeapon && weapon != null && !IsBoneWeapon(weapon)) return true;
 
-                var damage = hitData?.GetType().GetProperty("damage")?.GetValue(hitData);
+                // Get damage via reflection
+                var damage = GetPropertyValue(hitData, "damage");
                 if (damage is float dmg && dmg < MinDamageThreshold) return true;
 
-                var targetRig = hitData?.GetType().GetProperty("targetRig")?.GetValue(hitData);
+                // Get targetRig via reflection
+                var targetRig = GetPropertyValue(hitData, "targetRig");
                 if (targetRig == null) return true;
 
-                var rigManager = targetRig as RigManager;
-                if (rigManager == null) return true;
+                // Check if it's a RigManager
+                if (_rigManagerType == null || !_rigManagerType.IsInstanceOfType(targetRig)) return true;
 
+                // Check isPlayer
                 bool isPlayer = false;
-                var isPlayerProp = rigManager.GetType().GetProperty("isPlayer");
-                if (isPlayerProp != null) isPlayer = (bool)(isPlayerProp.GetValue(rigManager) ?? false);
+                if (_isPlayerProperty != null)
+                    isPlayer = (bool)(_isPlayerProperty.GetValue(targetRig) ?? false);
 
+                // Check isNPC
                 bool isNPC = false;
-                var npcType = Type.GetType("NPC, Assembly-CSharp");
-                if (npcType != null)
+                if (_npcType != null)
                 {
-                    isNPC = rigManager.gameObject.GetComponent(npcType) != null ||
-                            rigManager.gameObject.GetComponentInParent(npcType) != null;
+                    var go = targetRig as GameObject;
+                    if (go != null)
+                    {
+                        // Use reflection for IL2CPP compatibility
+                        var getComponent = typeof(GameObject).GetMethod("GetComponent", new[] { typeof(string) });
+                        var getComponentInParent = typeof(GameObject).GetMethod("GetComponentInParent", new[] { typeof(string) });
+                        string npcTypeName = _npcType.FullName;
+                        isNPC = getComponent.Invoke(go, new object[] { npcTypeName }) != null ||
+                                getComponentInParent.Invoke(go, new object[] { npcTypeName }) != null;
+                    }
                 }
 
                 if ((isPlayer && !TriggerOnPlayers) || (isNPC && !TriggerOnNPCs)) return true;
@@ -356,36 +422,14 @@ namespace ImpactFrame
 
                 // Check if this is a killing blow
                 bool isKill = false;
-                var healthProp = targetRig.GetType().GetProperty("health");
-                if (healthProp != null)
+                if (_healthProperty != null)
                 {
-                    float health = (float)(healthProp.GetValue(targetRig) ?? 100f);
+                    float health = (float)(_healthProperty.GetValue(targetRig) ?? 100f);
                     if (health <= 0) isKill = true;
                 }
 
-                MelonCoroutines.Start(DoImpactEffect(rigManager, hitData, isPlayer, isNPC, isKill));
+                MelonCoroutines.Start(DoImpactEffect(targetRig, hitData, isPlayer, isNPC, isKill));
                 return true;
-            }
-
-            private static bool IsBoneWeapon(GameObject weapon)
-            {
-                if (weapon == null) return false;
-                string name = weapon.name.ToLower();
-                return name.Contains("bone") || name.Contains("skull") || name.Contains("femur") ||
-                       name.Contains("humerus") || name.Contains("rib") || name.Contains("spine") ||
-                       name.Contains("clavicle") || name.Contains("scapula") || name.Contains("pelvis") ||
-                       name.Contains("radius") || name.Contains("ulna") || name.Contains("tibia") ||
-                       name.Contains("fibula") || name.Contains("vertebra");
-            }
-
-            private static void UpdateCombo()
-            {
-                if (!EnableCombo) return;
-                if (Time.unscaledTime - _lastHitTime <= ComboWindow)
-                    ComboCount = Mathf.Min(ComboCount + 1, MaxComboCount);
-                else
-                    ComboCount = 1;
-                _lastHitTime = Time.unscaledTime;
             }
         }
 
@@ -401,7 +445,7 @@ namespace ImpactFrame
         }
 
         // ========== IMPACT EFFECT ==========
-        private static IEnumerator DoImpactEffect(RigManager targetRig, object hitData, bool isPlayer, bool isNPC, bool isKill)
+        private static IEnumerator DoImpactEffect(object targetRig, object hitData, bool isPlayer, bool isNPC, bool isKill)
         {
             if (_isEffectActive) yield break;
             _isEffectActive = true;
@@ -413,9 +457,9 @@ namespace ImpactFrame
             float originalFixedDelta = Time.fixedDeltaTime;
 
             // Capture hit position
-            Vector3 hitPos = targetRig.transform.position + Vector3.up * 1.5f;
-            var hitPointProp = hitData?.GetType().GetProperty("hitPoint");
-            if (hitPointProp != null && hitPointProp.GetValue(hitData) is Vector3 hp)
+            Vector3 hitPos = ((GameObject)targetRig).transform.position + Vector3.up * 1.5f;
+            var hitPoint = GetPropertyValue(hitData, "hitPoint");
+            if (hitPoint is Vector3 hp)
                 hitPos = hp;
 
             // Flash target renderers
@@ -488,9 +532,12 @@ namespace ImpactFrame
         }
 
         // ========== TARGET FLASH ==========
-        private static void StartTargetFlash(RigManager targetRig)
+        private static void StartTargetFlash(object targetRig)
         {
-            var renderers = targetRig.GetComponentsInChildren<Renderer>();
+            var go = targetRig as GameObject;
+            if (go == null) return;
+
+            var renderers = go.GetComponentsInChildren<Renderer>();
             foreach (var r in renderers)
             {
                 if (!_originalMaterials.ContainsKey(r))
@@ -509,14 +556,17 @@ namespace ImpactFrame
             }
         }
 
-        private static void UpdateTargetFlash(RigManager targetRig, float t)
+        private static void UpdateTargetFlash(object targetRig, float t)
         {
             if (!FlashTargetOnly) return;
 
             float flash = Mathf.Sin(t * (float)Math.PI) * FlashIntensity;
             Color emissionColor = FlashColor * flash * 2f;
 
-            var renderers = targetRig.GetComponentsInChildren<Renderer>();
+            var go = targetRig as GameObject;
+            if (go == null) return;
+
+            var renderers = go.GetComponentsInChildren<Renderer>();
             foreach (var r in renderers)
             {
                 if (r.materials != null)
@@ -530,7 +580,7 @@ namespace ImpactFrame
             }
         }
 
-        private static void EndTargetFlash(RigManager targetRig)
+        private static void EndTargetFlash(object targetRig)
         {
             foreach (var kvp in _originalMaterials)
             {
