@@ -1,0 +1,13 @@
+{
+  "name": "ImpactFrame",
+  "version": "1.0.0",
+  "author": "gdono",
+  "description": "Adds impact frame effects when hitting NPCs/players with bone weapons. Configurable chance, color, duration, and intensity.",
+  "dependencies": [
+    "MelonLoader",
+    "UnityEngine.CoreModule",
+    "0Harmony"
+  ],
+  "game": "Bonelab",
+  "gameVersion": "1.0.0+"
+}

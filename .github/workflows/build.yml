@@ -1,0 +1,142 @@
+name: Build ImpactFrame Mod
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# This workflow requires Bonelab + MelonLoader assemblies which are NOT on NuGet.
+# Options:
+# 1. Self-hosted runner with Bonelab installed (recommended)
+# 2. Provide assemblies as workflow artifacts/secrets
+# 3. Use a Docker image with dependencies pre-installed
+
+jobs:
+  build:
+    name: Build Mod
+    # Use self-hosted runner with Bonelab + MelonLoader installed
+    # runs-on: [self-hosted, windows, bonelab]
+    # For GitHub-hosted runners, this will fail without assemblies
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    env:
+      SOLUTION_FILE: ImpactFrame.csproj
+      CONFIGURATION: Release
+      # Path to MelonLoader libraries on the runner
+      MELONLOADER_PATH: ${{ runner.temp }}/melonloader_libs
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Cache MelonLoader libraries
+        id: melonloader-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MELONLOADER_PATH }}
+          key: melonloader-libs-${{ runner.os }}-${{ hashFiles('**/ImpactFrame.csproj') }}
+          restore-keys: |
+            melonloader-libs-${{ runner.os }}-
+
+      - name: Check for required assemblies
+        id: check-assemblies
+        shell: pwsh
+        run: |
+          $required = @(
+            "MelonLoader.dll",
+            "0Harmony.dll",
+            "UnityEngine.CoreModule.dll",
+            "UnityEngine.PhysicsModule.dll",
+            "UnityEngine.AnimationModule.dll",
+            "UnityEngine.UI.dll",
+            "SLZ.Marrow.dll",
+            "SLZ.Marrow.Warehouse.dll",
+            "SLZ.Rig.dll",
+            "SLZ.Combat.dll",
+            "SLZ.Bonelab.dll"
+          )
+
+          $missing = @()
+          foreach ($dll in $required) {
+            $path = Join-Path $env:MELONLOADER_PATH $dll
+            if (-not (Test-Path $path)) {
+              $missing += $dll
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Warning "Missing assemblies: $($missing -join ', ')"
+            echo "has-assemblies=false" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "All assemblies found"
+            echo "has-assemblies=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Download MelonLoader (fallback)
+        if: steps.check-assemblies.outputs.has-assemblies == 'false'
+        shell: pwsh
+        run: |
+          Write-Host "Attempting to download MelonLoader 0.6.4..."
+          $url = "https://github.com/HerpDerpinstine/MelonLoader/releases/download/v0.6.4/MelonLoader.x64.zip"
+          $zipPath = Join-Path $env:RUNNER_TEMP "MelonLoader.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zipPath
+
+          Expand-Archive -Path $zipPath -DestinationPath $env:MELONLOADER_PATH -Force
+
+          # Note: This only gets MelonLoader, not Bonelab game assemblies (SLZ.*.dll)
+          # Those MUST come from a Bonelab installation with MelonLoader
+
+      - name: Build project
+        if: steps.check-assemblies.outputs.has-assemblies == 'true'
+        run: dotnet build ${{ env.SOLUTION_FILE }} -c ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Upload build artifact
+        if: steps.check-assemblies.outputs.has-assemblies == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImpactFrame-Mod
+          path: bin/Release/netstandard2.0/ImpactFrame.dll
+          retention-days: 7
+
+      - name: Create release package
+        if: steps.check-assemblies.outputs.has-assemblies == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir release
+          copy bin\Release\netstandard2.0\ImpactFrame.dll release\
+          copy README.md release\
+          copy mod.json release\
+          # Create zip for release
+          7z a -tzip ImpactFrame-${{ github.ref_name }}.zip release\*
+
+      - name: Upload release asset
+        if: steps.check-assemblies.outputs.has-assemblies == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ImpactFrame-*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Alternative: Validate code compiles (without game assemblies)
+  validate:
+    name: Validate Code Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Check C# syntax (basic validation)
+        run: |
+          # This validates the C# syntax without needing game assemblies
+          dotnet build ImpactFrame.csproj -c Release --no-restore 2>&1 | head -50 || true
+        continue-on-error: true

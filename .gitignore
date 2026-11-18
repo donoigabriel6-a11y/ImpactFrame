@@ -1,0 +1,27 @@
+# Build outputs
+bin/
+obj/
+*.dll
+*.pdb
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local config
+*.local.csproj
+*.local.props
+
+# Artifacts
+artifacts/
+package_*/
+*.zip
+
+# MelonPreferences (local user settings)
+MelonPreferences.cfg

@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <AssemblyName>ImpactFrame</AssemblyName>
+    <RootNamespace>ImpactFrame</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference MelonLoader and Harmony from local installation -->
+    <Reference Include="MelonLoader">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\MelonLoader.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AnimationModule">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\UnityEngine.AnimationModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+
+    <!-- Bonelab Game Assemblies -->
+    <Reference Include="SLZ.Marrow">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\SLZ.Marrow.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SLZ.Marrow.Warehouse">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\SLZ.Marrow.Warehouse.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SLZ.Rig">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\SLZ.Rig.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SLZ.Combat">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\SLZ.Combat.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SLZ.Bonelab">
+      <HintPath>$(USERPROFILE)\AppData\LocalLow\Stress Level Zero\Bonelab\MelonLoader\Libraries\SLZ.Bonelab.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

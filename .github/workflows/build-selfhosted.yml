@@ -1,0 +1,125 @@
+name: Build ImpactFrame (Self-Hosted Runner)
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+# This workflow is designed for a SELF-HOSTED RUNNER with:
+# - Windows
+# - Bonelab installed
+# - MelonLoader 0.6.4+ installed and launched at least once
+# - .NET 7 SDK installed
+
+jobs:
+  build:
+    name: Build & Package
+    runs-on: [self-hosted, windows, bonelab]
+    timeout-minutes: 15
+
+    env:
+      CONFIGURATION: Release
+      MOD_NAME: ImpactFrame
+      GAME_PATH: C:\Program Files (x86)\Steam\steamapps\common\Bonelab
+      MELONLOADER_PATH: ${{ env.GAME_PATH }}\MelonLoader
+      LIBS_PATH: ${{ env.MELONLOADER_PATH }}\Libraries
+      MODS_PATH: ${{ env.GAME_PATH }}\Mods
+      OUTPUT_DIR: ${{ github.workspace }}\artifacts
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify environment
+        shell: pwsh
+        run: |
+          Write-Host "Checking required paths..."
+          $paths = @(
+            @("MelonLoader.dll", $env:MELONLOADER_PATH),
+            @("0Harmony.dll", $env:LIBS_PATH),
+            @("UnityEngine.CoreModule.dll", $env:LIBS_PATH),
+            @("SLZ.Marrow.dll", $env:LIBS_PATH),
+            @("SLZ.Combat.dll", $env:LIBS_PATH),
+            @("SLZ.Rig.dll", $env:LIBS_PATH)
+          )
+          $allGood = $true
+          foreach ($p in $paths) {
+            $full = Join-Path $p[1] $p[0]
+            if (Test-Path $full) {
+              Write-Host "  ✓ $($p[0])"
+            } else {
+              Write-Error "  ✗ MISSING: $full"
+              $allGood = $false
+            }
+          }
+          if (-not $allGood) { exit 1 }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '7.0.x'
+
+      - name: Restore & Build
+        run: dotnet build ImpactFrame.csproj -c ${{ env.CONFIGURATION }}
+
+      - name: Verify output
+        shell: pwsh
+        run: |
+          $dll = "bin\Release\netstandard2.0\ImpactFrame.dll"
+          if (Test-Path $dll) {
+            $size = (Get-Item $dll).Length
+            Write-Host "Built: $dll ($([math]::Round($size/1KB)) KB)"
+          } else {
+            Write-Error "DLL not found!"
+            exit 1
+          }
+
+      - name: Create release package
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME
+          $pkgDir = "package_$version"
+          New-Item -ItemType Directory -Path $pkgDir | Out-Null
+          Copy-Item "bin\Release\netstandard2.0\ImpactFrame.dll" $pkgDir\
+          Copy-Item "README.md" $pkgDir\
+          Copy-Item "mod.json" $pkgDir\
+          Copy-Item "INSTALL.md" $pkgDir\
+
+          # Create zip
+          Compress-Archive -Path "$pkgDir\*" -DestinationPath "ImpactFrame-$version.zip" -Force
+          Write-Host "Created: ImpactFrame-$version.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImpactFrame-Mod-${{ github.ref_name }}
+          path: |
+            bin/Release/netstandard2.0/ImpactFrame.dll
+            ImpactFrame-*.zip
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ImpactFrame ${{ github.ref_name }}
+          files: ImpactFrame-*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to game Mods folder (optional)
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $modsPath = $env:MODS_PATH
+          if (Test-Path $modsPath) {
+            Copy-Item "bin\Release\netstandard2.0\ImpactFrame.dll" -Destination $modsPath -Force
+            Write-Host "Deployed to $modsPath"
+          } else {
+            Write-Warning "Mods folder not found at $modsPath"
+          }
