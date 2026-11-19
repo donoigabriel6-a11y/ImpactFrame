@@ -7,14 +7,15 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-[assembly: MelonInfo(typeof(ImpactFrame.ImpactFrameMod), "ImpactFrame", "2.2.0", "gdono")]
-[assembly: MelonGame("Stress Level Zero", "Bonelab")]
+[assembly: MelonInfo(typeof(ImpactFrame.ImpactFrameMod), "ImpactFrame", "2.3.0", "gdono")]
+[assembly: MelonGame("Stress Level Zero", "BONELAB")]
 
 namespace ImpactFrame
 {
     public class ImpactFrameMod : MelonMod
     {
         // ========== QUEST DEFAULTS ==========
+#if QUEST
         private const bool IS_QUEST = true;
         private const int DEFAULT_PARTICLE_CAP = 30;
         private const float DEFAULT_TIME_SCALE = 0.08f;
@@ -24,6 +25,17 @@ namespace ImpactFrame
         private const float DEFAULT_HIT_MARKER_SIZE = 0.2f;
         public const int DEFAULT_COMBO_FONT_SIZE = 32;
         private const float DEFAULT_KILL_SCALE = 0.2f;
+#else
+        private const bool IS_QUEST = false;
+        private const int DEFAULT_PARTICLE_CAP = 200;
+        private const float DEFAULT_TIME_SCALE = 0.02f;
+        private const float DEFAULT_FLASH_INTENSITY = 2f;
+        private const float DEFAULT_SHAKE_MAGNITUDE = 0.12f;
+        private const float DEFAULT_SOUND_VOLUME = 0.7f;
+        private const float DEFAULT_HIT_MARKER_SIZE = 0.3f;
+        public const int DEFAULT_COMBO_FONT_SIZE = 42;
+        private const float DEFAULT_KILL_SCALE = 0.1f;
+#endif
 
         // ========== CONFIGURATION ==========
         public static bool Enabled = true;
@@ -36,7 +48,11 @@ namespace ImpactFrame
 
         [Flags]
         public enum Effects { None = 0, TimeStop = 1, TimeSlow = 2, ScreenFlash = 4, ScreenShake = 8, Particles = 16, Sound = 32, HitMarker = 64, All = 127 }
+#if QUEST
         public static Effects ActiveEffects = Effects.All & ~Effects.Particles & ~Effects.ScreenShake; // Conservative defaults for Quest
+#else
+        public static Effects ActiveEffects = Effects.All;
+#endif
 
         public static float TimeScale = 0.08f;
         public static float Duration = 0.1f;
@@ -80,11 +96,13 @@ namespace ImpactFrame
         public static float KillSlowMoScale = 0.2f;
 
         // UI State
+#if QUEST
         public static bool ShowConfigUI = false;
         private static int _uiTab = 0;
         private static Vector2 _scrollPos;
         private static Rect _windowRect = new Rect(50, 50, 400, 500);
         private static bool _uiInitialized = false;
+#endif
 
         // ========== INTERNAL STATE ==========
         private static readonly HarmonyLib.Harmony _harmony = new HarmonyLib.Harmony("gdono.impactframe");
@@ -116,8 +134,11 @@ namespace ImpactFrame
             LoadPreferences();
             InitializeReflection();
             SetupHarmony();
-            MelonLogger.Msg("[ImpactFrame] Quest v2.2 initialized!");
-            _lastDebugMsg = "Mod initialized - Press trigger+grip to open config";
+#if QUEST
+            MelonLogger.Msg("[ImpactFrame] Quest v2.3 initialized!");
+#else
+            MelonLogger.Msg("[ImpactFrame] PC version initialized v2.3 - Better Impact Frames!");
+#endif
         }
 
         private static void InitializeReflection()
@@ -163,8 +184,8 @@ namespace ImpactFrame
             _category.CreateEntry("ShakeRoughness", ShakeRoughness, "Shake roughness");
             _category.CreateEntry("ShakeFadeIn", ShakeFadeIn, "Shake fade in");
             _category.CreateEntry("ShakeFadeOut", ShakeFadeOut, "Shake fade out");
-            _category.CreateEntry("EnableParticles", EnableParticles, "Enable hit particles (costly)");
-            _category.CreateEntry("ParticleCount", ParticleCount, "Particles per hit");
+            _category.CreateEntry("EnableParticles", EnableParticles, "Enable hit particles" + (IS_QUEST ? " (costly on Quest)" : ""));
+            _category.CreateEntry("ParticleCount", ParticleCount, "Particles per hit (max " + DEFAULT_PARTICLE_CAP + ")");
             _category.CreateEntry("ParticleSize", ParticleSize, "Particle size");
             _category.CreateEntry("ParticleLifetime", ParticleLifetime, "Particle lifetime");
             _category.CreateEntry("ParticleSpeed", ParticleSpeed, "Particle initial speed");
@@ -224,7 +245,7 @@ namespace ImpactFrame
             ShakeFadeOut = Mathf.Max(0, _category.GetEntry<float>("ShakeFadeOut").Value);
 
             EnableParticles = _category.GetEntry<bool>("EnableParticles").Value;
-            ParticleCount = Mathf.Clamp(_category.GetEntry<int>("ParticleCount").Value, 0, 30);
+            ParticleCount = Mathf.Clamp(_category.GetEntry<int>("ParticleCount").Value, 0, DEFAULT_PARTICLE_CAP);
             ParticleSize = Mathf.Max(0.01f, _category.GetEntry<float>("ParticleSize").Value);
             ParticleLifetime = Mathf.Max(0.01f, _category.GetEntry<float>("ParticleLifetime").Value);
             ParticleSpeed = Mathf.Max(0, _category.GetEntry<float>("ParticleSpeed").Value);
@@ -259,7 +280,11 @@ namespace ImpactFrame
             KillSlowMoDuration = Mathf.Max(0.01f, _category.GetEntry<float>("KillSlowMoDuration").Value);
             KillSlowMoScale = Mathf.Clamp01(_category.GetEntry<float>("KillSlowMoScale").Value);
 
-            MelonLogger.Msg($"[ImpactFrame] Config loaded - Enabled: {Enabled}, Chance: {ImpactChance}, Effects: {ActiveEffects}");
+#if QUEST
+            MelonLogger.Msg($"[ImpactFrame] Quest config loaded - Enabled: {Enabled}, Chance: {ImpactChance}");
+#else
+            MelonLogger.Msg($"[ImpactFrame] PC config loaded - Enabled: {Enabled}, Chance: {ImpactChance}");
+#endif
         }
 
         public static void ReloadConfig() => LoadPreferences();
@@ -652,7 +677,7 @@ namespace ImpactFrame
             clip.SetData(samples, 0);
             _audioSource.pitch = SoundPitch;
             _audioSource.PlayOneShot(clip);
-            yield return new WaitForSecondsRealtime(0.12f);
+            yield return new WaitForSecondsRealtime(IS_QUEST ? 0.12f : 0.15f);
             UnityEngine.Object.Destroy(clip);
         }
 
@@ -703,6 +728,7 @@ namespace ImpactFrame
     }
 
     // ========== CONFIG UI (OnGUI) ==========
+#if QUEST
     public class ConfigUI : MonoBehaviour
     {
         private Rect _windowRect = new Rect(50, 50, 400, 550);
@@ -747,12 +773,11 @@ namespace ImpactFrame
             GUI.DragWindow(new Rect(0, 0, 400, 40));
 
             GUILayout.Space(10);
-            GUILayout.Label("IMPACT FRAME v2.2", _titleStyle);
+            GUILayout.Label("IMPACT FRAME v2.3", _titleStyle);
             GUILayout.Space(5);
             GUILayout.Label("Quest Config Menu", _labelStyle);
             GUILayout.Space(10);
 
-            // Tabs
             _tab = GUILayout.Toolbar(_tab, _tabs, _buttonStyle);
             GUILayout.Space(10);
 
@@ -1001,8 +1026,10 @@ namespace ImpactFrame
             return new Color(r, g, b, a);
         }
     }
+#endif
 
     // Auto-add ConfigUI to main camera
+#if QUEST
     [HarmonyPatch(typeof(Camera), "OnPostRender")]
     static class CameraPatch
     {
@@ -1012,8 +1039,10 @@ namespace ImpactFrame
                 __instance.gameObject.AddComponent<ConfigUI>();
         }
     }
+#endif
 
     // Input handler for opening config
+#if QUEST
     public class InputHandler : MonoBehaviour
     {
         private float _gripPressTime = 0f;
@@ -1021,7 +1050,6 @@ namespace ImpactFrame
 
         private void Update()
         {
-            // Check for OVRInput (Quest controllers)
             try
             {
                 var ovrInputType = Type.GetType("OVRInput, Assembly-CSharp");
@@ -1031,12 +1059,10 @@ namespace ImpactFrame
                     var getDownMethod = ovrInputType.GetMethod("GetDown", new[] { typeof(int) });
                     var getUpMethod = ovrInputType.GetMethod("GetUp", new[] { typeof(int) });
 
-                    // Button indices: 1=Trigger, 2=Grip, 4=Start/Menu
                     const int trigger = 1;
                     const int grip = 2;
                     const int menu = 4;
 
-                    // Check if both grip and trigger held
                     bool gripHeld = (bool)(getMethod?.Invoke(null, new object[] { grip }) ?? false);
                     bool triggerHeld = (bool)(getMethod?.Invoke(null, new object[] { trigger }) ?? false);
                     bool menuPressed = (bool)(getDownMethod?.Invoke(null, new object[] { menu }) ?? false);
@@ -1047,21 +1073,23 @@ namespace ImpactFrame
                     }
                     else if (gripHeld && triggerHeld)
                     {
-                        // Both held - could use for something else
                     }
                 }
             }
             catch { }
         }
     }
+#endif
 
     [HarmonyPatch(typeof(Camera), "OnPostRender")]
     static class InputPatch
     {
         static void Postfix(Camera __instance)
         {
+#if QUEST
             if (__instance == Camera.main && __instance.GetComponent<InputHandler>() == null)
                 __instance.gameObject.AddComponent<InputHandler>();
+#endif
         }
     }
 }
